@@ -7,7 +7,7 @@ const host = process.env.HOST || 'localhost';
 const port = Number(process.env.PORT || 3000);
 const dataDirectory = path.join(__dirname, 'data');
 const dataFile = path.join(dataDirectory, 'students.json');
-const allowedOrigins = new Set((process.env.CORS_ORIGINS || 'http://localhost:4200,http://127.0.0.1:4200')
+const allowedOrigins = new Set((process.env.CORS_ORIGINS || 'http://localhost:4200,http://127.0.0.1:4200,https://yps-reactive-form2.vercel.app')
   .split(',').map((origin) => origin.trim()).filter(Boolean));
 
 const requiredText = (value, label, min, max) => {
