@@ -1,14 +1,18 @@
 const http = require('node:http');
-const fs = require('node:fs/promises');
-const path = require('node:path');
 const { randomUUID } = require('node:crypto');
+const { MongoClient } = require('mongodb');
 
 const host = process.env.HOST || 'localhost';
 const port = Number(process.env.PORT || 3000);
-const dataDirectory = path.join(__dirname, 'data');
-const dataFile = path.join(dataDirectory, 'students.json');
+const mongoUri = process.env.MONGODB_URI;
+const databaseName = process.env.MONGODB_DB || 'yps_reactive_form';
 const allowedOrigins = new Set((process.env.CORS_ORIGINS || 'http://localhost:4200,http://127.0.0.1:4200,https://yps-reactive-form2.vercel.app')
   .split(',').map((origin) => origin.trim()).filter(Boolean));
+
+if (!mongoUri) throw new Error('MONGODB_URI must be set to start the student API.');
+
+const mongoClient = new MongoClient(mongoUri);
+let studentsCollection;
 
 function todayInIndia() {
   return new Intl.DateTimeFormat('en-CA', {
@@ -70,21 +74,7 @@ function validateStudent(student) {
 }
 
 async function readStudents() {
-  try {
-    const content = await fs.readFile(dataFile, 'utf8');
-    const students = JSON.parse(content);
-    return Array.isArray(students) ? students : [];
-  } catch (error) {
-    if (error.code === 'ENOENT') return [];
-    throw error;
-  }
-}
-
-async function writeStudents(students) {
-  await fs.mkdir(dataDirectory, { recursive: true });
-  const temporaryFile = `${dataFile}.tmp`;
-  await fs.writeFile(temporaryFile, `${JSON.stringify(students, null, 2)}\n`, 'utf8');
-  await fs.rename(temporaryFile, dataFile);
+  return studentsCollection.find({}, { projection: { _id: 0 } }).sort({ createdAt: -1 }).toArray();
 }
 
 function send(response, status, payload) {
@@ -131,8 +121,8 @@ const server = http.createServer(async (request, response) => {
       const body = await readBody(request);
       const validationError = validateStudent(body);
       if (validationError) return send(response, 400, { message: validationError });
-      const students = await readStudents();
-      if (students.some((student) => student.phone === body.phone.trim())) {
+      const phone = body.phone.trim();
+      if (await studentsCollection.findOne({ phone }, { projection: { _id: 1 } })) {
         return send(response, 409, { message: 'A student with this phone number already exists.' });
       }
       const totalFees = Number(body.courseFee);
@@ -143,7 +133,7 @@ const server = http.createServer(async (request, response) => {
         firstName: body.firstName.trim(),
         lastName: body.lastName.trim(),
         email: body.email.trim().toLowerCase(),
-        phone: body.phone.trim(),
+        phone,
         gender: body.gender,
         photo: body.photo || undefined,
         admissionYear: body.admissionYear,
@@ -162,14 +152,26 @@ const server = http.createServer(async (request, response) => {
         remarks: body.remarks.trim(),
         createdAt: new Date().toISOString()
       };
-      students.push(student);
-      await writeStudents(students);
+      await studentsCollection.insertOne(student);
       return send(response, 201, student);
     }
     return send(response, 404, { message: 'Route not found.' });
   } catch (error) {
+    if (error.code === 11000) return send(response, 409, { message: 'A student with this phone number already exists.' });
     return send(response, error.status || 500, { message: error.status ? error.message : 'The student service encountered an error.' });
   }
 });
 
-server.listen(port, host, () => console.log(`YPS student API listening at http://${host}:${port}`));
+async function start() {
+  await mongoClient.connect();
+  const database = mongoClient.db(databaseName);
+  studentsCollection = database.collection('students');
+  await studentsCollection.createIndex({ phone: 1 }, { unique: true });
+  server.listen(port, host, () => console.log(`YPS student API listening at http://${host}:${port}`));
+}
+
+start().catch((error) => {
+  console.error('Could not connect to MongoDB or initialize the students collection:', error.message);
+  process.exitCode = 1;
+  mongoClient.close().finally(() => process.exit());
+});
