@@ -15,3 +15,5 @@ CORS_ORIGINS=https://yps-reactive-form2.vercel.app,http://localhost:4200,http://
 ```
 
 The frontend must also use the backend's deployed base URL for its API requests; CORS only permits the browser request and does not configure the frontend's API URL.
+
+When an initial payment is submitted, the API records the payment date as the current date in India (`Asia/Kolkata`), regardless of any date sent by the frontend.

@@ -10,6 +10,12 @@ const dataFile = path.join(dataDirectory, 'students.json');
 const allowedOrigins = new Set((process.env.CORS_ORIGINS || 'http://localhost:4200,http://127.0.0.1:4200,https://yps-reactive-form2.vercel.app')
   .split(',').map((origin) => origin.trim()).filter(Boolean));
 
+function todayInIndia() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).format(new Date());
+}
+
 const requiredText = (value, label, min, max) => {
   if (typeof value !== 'string') return `${label} is required.`;
   const text = value.trim();
@@ -56,8 +62,6 @@ function validateStudent(student) {
   }
   if (student.initialPayment > 0) {
     if (!['Cash', 'Online'].includes(student.paymentMethod)) return 'Choose Cash or Online for the initial payment.';
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(student.paymentDate || '') || Number.isNaN(Date.parse(`${student.paymentDate}T00:00:00Z`))) return 'Enter a valid payment date.';
-    if (student.paymentDate > new Date().toISOString().slice(0, 10)) return 'Payment date cannot be in the future.';
     if (student.paymentMethod === 'Online' && !['Google Pay', 'PhonePe', 'Paytm', 'UPI (other)', 'Card', 'Net banking'].includes(student.onlineProvider)) {
       return 'Select an online payment method.';
     }
@@ -152,7 +156,7 @@ const server = http.createServer(async (request, response) => {
         paidAmount,
         pendingFees: Math.max(0, totalFees - discount - paidAmount),
         initialPayment: paidAmount,
-        paymentDate: paidAmount ? body.paymentDate : undefined,
+        paymentDate: paidAmount ? todayInIndia() : undefined,
         paymentMethod: paidAmount ? body.paymentMethod : undefined,
         onlineProvider: paidAmount && body.paymentMethod === 'Online' ? body.onlineProvider : undefined,
         remarks: body.remarks.trim(),
