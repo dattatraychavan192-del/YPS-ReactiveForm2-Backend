@@ -1,1 +1,6 @@
-{`n  "name": "yps-reactive-form-backend",`n  "version": "1.0.0",`n  "private": true,`n  "scripts": { "start": "node server.js" }`n}
+{
+  "name": "yps-reactive-form-backend",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": { "start": "node server.js" }
+}
