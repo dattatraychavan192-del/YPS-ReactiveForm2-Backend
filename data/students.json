@@ -1,0 +1,73 @@
+[
+  {
+    "id": "1a7a0734-a9f8-4b95-8b15-b8697297fac4",
+    "firstName": "hgdhf",
+    "lastName": "dsfhgds",
+    "email": "dfhgdffd@ghjghd.fgh",
+    "phone": "7985463124",
+    "dateOfBirth": "2017-06-11",
+    "gender": "Male",
+    "standard": "7",
+    "course": "SSC",
+    "guardianName": "hgdfrhgjfdhfrfg",
+    "guardianPhone": "8795555564",
+    "address": "sty dsjfgil;s sfgiojsfdglk",
+    "createdAt": "2026-10-15T18:07:25.632Z"
+  },
+  {
+    "id": "8b328db5-b911-48ac-9d06-d15731d7637a",
+    "firstName": "datta",
+    "lastName": "chavan",
+    "email": "data@gmail.com",
+    "phone": "7854693656",
+    "gender": "Male",
+    "admissionYear": "2026-27",
+    "className": "9",
+    "subjects": [
+      "English",
+      "Mathematics",
+      "Physics",
+      "Chemistry"
+    ],
+    "selfStudy": true,
+    "courseFee": 4500,
+    "discount": 0,
+    "totalFees": 4500,
+    "paidAmount": 4500,
+    "pendingFees": 0,
+    "initialPayment": 4500,
+    "paymentDate": "2026-10-15",
+    "paymentMethod": "Online",
+    "onlineProvider": "Paytm",
+    "remarks": "",
+    "createdAt": "2026-10-15T18:24:25.710Z"
+  },
+  {
+    "id": "f3920526-8313-45f0-a644-ef7e2b681286",
+    "firstName": "data",
+    "lastName": "chavan",
+    "email": "datas@gnail.com",
+    "phone": "7854693555",
+    "gender": "Female",
+    "admissionYear": "2026-27",
+    "className": "8",
+    "subjects": [
+      "Maths",
+      "English",
+      "Science",
+      "Social Science"
+    ],
+    "selfStudy": false,
+    "courseFee": 8400,
+    "discount": 0,
+    "totalFees": 8400,
+    "paidAmount": 8400,
+    "pendingFees": 0,
+    "initialPayment": 8400,
+    "paymentDate": "2026-10-15",
+    "paymentMethod": "Online",
+    "onlineProvider": "Google Pay",
+    "remarks": "",
+    "createdAt": "2026-10-15T18:29:08.256Z"
+  }
+]

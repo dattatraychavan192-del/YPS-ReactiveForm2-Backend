@@ -1,0 +1,171 @@
+const http = require('node:http');
+const fs = require('node:fs/promises');
+const path = require('node:path');
+const { randomUUID } = require('node:crypto');
+
+const host = process.env.HOST || 'localhost';
+const port = Number(process.env.PORT || 3000);
+const dataDirectory = path.join(__dirname, 'data');
+const dataFile = path.join(dataDirectory, 'students.json');
+const allowedOrigins = new Set((process.env.CORS_ORIGINS || 'http://localhost:4200,http://127.0.0.1:4200')
+  .split(',').map((origin) => origin.trim()).filter(Boolean));
+
+const requiredText = (value, label, min, max) => {
+  if (typeof value !== 'string') return `${label} is required.`;
+  const text = value.trim();
+  if (text.length < min) return `${label} must be at least ${min} characters.`;
+  if (text.length > max) return `${label} must be no more than ${max} characters.`;
+  return null;
+};
+
+function validateStudent(student) {
+  if (!student || typeof student !== 'object' || Array.isArray(student)) return 'A student object is required.';
+  const checks = [
+    requiredText(student.firstName, 'First name', 2, 50),
+    requiredText(student.lastName, 'Last name', 2, 50),
+    requiredText(student.phone, 'Phone', 10, 10),
+    requiredText(student.gender, 'Gender', 1, 20),
+    requiredText(student.admissionYear, 'Admission year', 7, 7),
+    requiredText(student.className, 'Class', 1, 2)
+  ];
+  if (typeof student.email !== 'string' || student.email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(student.email.trim())) {
+    return 'Enter a valid email address.';
+  }
+  const invalid = checks.find(Boolean);
+  if (invalid) return invalid;
+  if (!/^[6-9]\d{9}$/.test(student.phone)) return 'Enter a valid 10-digit Indian mobile number.';
+  if (!['Female', 'Male', 'Other'].includes(student.gender)) return 'Select a valid gender.';
+  if (!/^\d{4}-\d{2}$/.test(student.admissionYear)) return 'Use the academic session format YYYY-YY.';
+  if (!['8', '9', '10'].includes(student.className)) return 'Select a valid class.';
+  const subjects = ['English', 'Maths', 'Science', 'Social Science'];
+  const subjectCatalog = { '8': subjects, '9': subjects, '10': subjects };
+  if (!Array.isArray(student.subjects) || student.subjects.length === 0 || student.subjects.some((subject) => !subjectCatalog[student.className].includes(subject))) {
+    return 'Select at least one valid subject for the class.';
+  }
+  if (typeof student.selfStudy !== 'boolean') return 'Self study mode must be true or false.';
+  for (const field of ['courseFee', 'discount', 'initialPayment']) {
+    if (!Number.isFinite(student[field]) || student[field] < 0) return `${field} must be a non-negative amount.`;
+  }
+  if (student.discount > student.courseFee) return 'Discount cannot be greater than total course fees.';
+  if (student.initialPayment > student.courseFee - student.discount) return 'Initial payment cannot be greater than the discounted total fees.';
+  if (typeof student.remarks !== 'string' || student.remarks.length > 500) return 'Remarks must be no more than 500 characters.';
+  if (student.photo !== undefined && student.photo !== '') {
+    if (typeof student.photo !== 'string' || student.photo.length > 2800000 || !/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(student.photo)) {
+      return 'Photo must be a JPG, PNG, or WEBP image no larger than 2 MB.';
+    }
+  }
+  if (student.initialPayment > 0) {
+    if (!['Cash', 'Online'].includes(student.paymentMethod)) return 'Choose Cash or Online for the initial payment.';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(student.paymentDate || '') || Number.isNaN(Date.parse(`${student.paymentDate}T00:00:00Z`))) return 'Enter a valid payment date.';
+    if (student.paymentDate > new Date().toISOString().slice(0, 10)) return 'Payment date cannot be in the future.';
+    if (student.paymentMethod === 'Online' && !['Google Pay', 'PhonePe', 'Paytm', 'UPI (other)', 'Card', 'Net banking'].includes(student.onlineProvider)) {
+      return 'Select an online payment method.';
+    }
+  }
+  return null;
+}
+
+async function readStudents() {
+  try {
+    const content = await fs.readFile(dataFile, 'utf8');
+    const students = JSON.parse(content);
+    return Array.isArray(students) ? students : [];
+  } catch (error) {
+    if (error.code === 'ENOENT') return [];
+    throw error;
+  }
+}
+
+async function writeStudents(students) {
+  await fs.mkdir(dataDirectory, { recursive: true });
+  const temporaryFile = `${dataFile}.tmp`;
+  await fs.writeFile(temporaryFile, `${JSON.stringify(students, null, 2)}\n`, 'utf8');
+  await fs.rename(temporaryFile, dataFile);
+}
+
+function send(response, status, payload) {
+  response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
+  response.end(JSON.stringify(payload));
+}
+
+function readBody(request) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    request.on('data', (chunk) => {
+      body += chunk;
+      if (body.length > 4 * 1024 * 1024) {
+        reject(Object.assign(new Error('Request body is too large.'), { status: 413 }));
+        request.destroy();
+      }
+    });
+    request.on('end', () => {
+      try { resolve(JSON.parse(body)); }
+      catch { reject(Object.assign(new Error('Request body must be valid JSON.'), { status: 400 })); }
+    });
+    request.on('error', reject);
+  });
+}
+
+const server = http.createServer(async (request, response) => {
+  const origin = request.headers.origin;
+  if (origin && allowedOrigins.has(origin)) {
+    response.setHeader('Access-Control-Allow-Origin', origin);
+    response.setHeader('Vary', 'Origin');
+    response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  }
+  if (request.method === 'OPTIONS') {
+    response.writeHead(204);
+    return response.end();
+  }
+
+  const route = new URL(request.url, `http://${request.headers.host || 'localhost'}`).pathname;
+  try {
+    if (request.method === 'GET' && route === '/api/health') return send(response, 200, { status: 'ok' });
+    if (request.method === 'GET' && route === '/api/students') return send(response, 200, await readStudents());
+    if (request.method === 'POST' && route === '/api/students') {
+      const body = await readBody(request);
+      const validationError = validateStudent(body);
+      if (validationError) return send(response, 400, { message: validationError });
+      const students = await readStudents();
+      if (students.some((student) => student.phone === body.phone.trim())) {
+        return send(response, 409, { message: 'A student with this phone number already exists.' });
+      }
+      const totalFees = Number(body.courseFee);
+      const discount = Number(body.discount);
+      const paidAmount = Number(body.initialPayment);
+      const student = {
+        id: randomUUID(),
+        firstName: body.firstName.trim(),
+        lastName: body.lastName.trim(),
+        email: body.email.trim().toLowerCase(),
+        phone: body.phone.trim(),
+        gender: body.gender,
+        photo: body.photo || undefined,
+        admissionYear: body.admissionYear,
+        className: body.className,
+        subjects: body.subjects,
+        selfStudy: body.selfStudy,
+        courseFee: totalFees,
+        discount,
+        totalFees,
+        paidAmount,
+        pendingFees: Math.max(0, totalFees - discount - paidAmount),
+        initialPayment: paidAmount,
+        paymentDate: paidAmount ? body.paymentDate : undefined,
+        paymentMethod: paidAmount ? body.paymentMethod : undefined,
+        onlineProvider: paidAmount && body.paymentMethod === 'Online' ? body.onlineProvider : undefined,
+        remarks: body.remarks.trim(),
+        createdAt: new Date().toISOString()
+      };
+      students.push(student);
+      await writeStudents(students);
+      return send(response, 201, student);
+    }
+    return send(response, 404, { message: 'Route not found.' });
+  } catch (error) {
+    return send(response, error.status || 500, { message: error.status ? error.message : 'The student service encountered an error.' });
+  }
+});
+
+server.listen(port, host, () => console.log(`YPS student API listening at http://${host}:${port}`));
